@@ -6,9 +6,20 @@
            org.apache.kafka.clients.producer.KafkaProducer
            org.apache.kafka.clients.producer.ProducerRecord)
   (:require [taoensso.nippy :as nippy]
-            [clojure.core.async :as async :refer [go go-loop put! take! <! >! <!! timeout chan alt! go]]))
+            [clojure.spec.alpha :as s]
+            [clojure.spec.gen.alpha :as gen]
+            [clj-kafka.specs :as ss]
+            [clojure.core.async :as async]))
 
-
+(def e1  {:event/id :111
+          :case/id :111
+          :event/action :screening})
+(def e2  {:event/id :222
+          :case/id :222
+          :event/action :screening})
+(def e2  {:event/id :333
+          :case/id :333
+          :event/action :screening})
 
 (def p-cfg {"value.serializer" ByteArraySerializer
             "key.serializer" ByteArraySerializer
@@ -16,7 +27,19 @@
 
 (def producer (KafkaProducer. p-cfg))
 
-(.send producer (ProducerRecord. "test" (nippy/freeze "ciao")))
+(repeatedly 1000 #(.send producer (ProducerRecord. "case-event" (nippy/freeze (rand 10)) (nippy/freeze e1))))
+
+
+
+                                        ;(gen/generate (s/gen spec/event))
+
+
+
+
+
+
+
+
 
 
 (def c-cfg
@@ -29,15 +52,15 @@
 
 (def consumer (doto (KafkaConsumer. c-cfg)
                 (.subscribe ["test"])))
-
-(go
-  (while true
-    (let [records (.poll consumer 100)]
-      (doseq [record records]
-        (let [m (-> record
-                    (.value)
-                    nippy/thaw)]
-          (println m))))))
+(comment
+  (async/go
+    (while true
+      (let [records (.poll consumer 100)]
+        (doseq [record records]
+          (let [m (-> record
+                      (.value)
+                      nippy/thaw)]
+            (println m)))))))
 
 
 
@@ -62,6 +85,7 @@
                                         ; 2 check if it is a valid command
                                         ; 3 VALID    --> update state, commit 
                                         ; 3 NOT-VALID --> send error
+
 (defn processing-cmds
   [commands init-state]
   (loop [state init-state
@@ -86,9 +110,10 @@
                    (conj good-cmds c)
                    bad-cmds)))))))
 
-(def cmds (gen/sample (s/gen :unq/cmd-lifecycle)))
-(def init-state (gen/generate (s/gen :unq/state)))
-(def r (processing-cmds cmds init-state))
-(:state r)
-(:good r)
-(:bad r)
+                                        ;(def cmds (gen/sample (s/gen :unq/cmd-lifecycle)))
+                                        ;(def init-state (gen/generate (s/gen :unq/state)))
+                                        ;(def r (processing-cmds cmds init-state))
+                                        ;(:State r)
+                                        ;(:good r)
+                                        ;(:bad r)
+
