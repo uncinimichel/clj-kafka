@@ -36,16 +36,18 @@
   (s/keys :req-un [::id ::creator ::owner ::screening-state ::lifecycle-state ::outstanding-actions]
           :opt-un [::modifier ::assigned ::last-screened-date ::provider]))
 
-(s/def :event/action #{:archived :deleted :updated :screening})
+(s/def :event/action #{:archived :deleted :updated :screening :screened})
 
-(s/def ::event
+(s/def ::k-event
   (s/keys :req [:event/id
                 :case/id
                 :event/action]))
 
-(println (gen/generate (s/gen ::event)))
+(println (gen/generate (s/gen ::k-event)))
 
 (s/def :unq/state (s/map-of ::id ::case))
+
+;(println (gen/generate (s/gen ::unq/state)))
 
 (s/def :unq/archive-cmd (s/map-of ::id ::case))
 
@@ -85,6 +87,7 @@
 (def event1 {:event/id 1111
              :case/id 1125
              :cmd :screening})
+
 
 (def cmds [cmd1 cmd2 cmd3])
 
