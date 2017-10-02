@@ -8,7 +8,6 @@
             [clj-kafka.common :as common]
             [clojure.data.json :as json]))
 
-
 (def c-cfg
   {"bootstrap.servers" "localhost:9092"
    "group.id" "consumer-db-group"
@@ -16,7 +15,6 @@
    "enable.auto.commit" "true"
    "key.deserializer" ByteArrayDeserializer
    "value.deserializer" ByteArrayDeserializer})
-
 
 (def consumer-db (doto (KafkaConsumer. c-cfg)
                    (.subscribe ["case-valid"])))
@@ -26,16 +24,30 @@
 (defn start-consuming
   []
   (reset! status :running)
-  (async/go
+  (async/thread
     (while (= @status :running)
       (let [records (.poll consumer-db 100)]
         (doseq [record records]
           (let [m (-> record
                       (.value)
                       nippy/thaw)]
-            (println "new CIAO!!!I got this event:" m "I am going to save it to the DB!!!"))))))
+            (fn-processing-record m))))))
+                                        ;maybe checking that the event-id is not in the DB
   status)
 
+(defn fn-processing-record
+  [record]
+  (Thread/sleep 500)
+  (println "Saving:" record "in the DB"))
 
-;(reset! status :no)
-                                        ;@status
+(defprotocol MyKafkaConsumer
+  (start-consuming [this]))
+
+(defrecord DBconsumers []
+  MyKafkaConsumer
+  (start-consuming [this]
+    (println "this is" (type this))))
+
+(start-consuming (DBconsumers.))
+
+

@@ -54,23 +54,20 @@
 (def xf-sending-results
   (map (fn
          [event]
-         (println "sending this over:" event)
-         (.send producer (ProducerRecord. "case-event" (nippy/freeze event))))))
+         (.send producer (ProducerRecord. "case-event" (nippy/freeze (assoc event :event/action :event/screened)))))))
 
 (def parallelism (+ (.availableProcessors (Runtime/getRuntime)) 1))
 
 (defn start-consuming
   [consumer out status]
-  (async/go
+  (async/thread
     (while (= @status :running)
       (let [records (.poll consumer 100)]
         (doseq [record records]
           (let [m (-> record
                       (.value)
                       nippy/thaw)]
-            (println "Screening consumer" m)
             (async/>!! out m)))))
-    (println "closing the screening consumer")
     (async/close! out)))
 
 (defn screening-consumer-pipeline
@@ -80,11 +77,13 @@
         out-sending-results (async/chan 1)]
     (reset! status :running)
     (start-consuming consumer-screening-case screening-chan status)
-    (async/pipeline parallelism out-screening-name xf-screening-name screening-chan)
-    (async/pipeline parallelism out-sending-results xf-sending-results out-screening-name)
-    (async/go
+    (async/pipeline-blocking parallelism out-screening-name xf-screening-name screening-chan)
+    (async/pipeline-blocking parallelism out-sending-results xf-sending-results out-screening-name)
+    (async/thread
       (while (= @status :running)
-        (println "getting this from the out chan" (async/<!! out-sending-results)))
-      status)))
+        ;Maybe checking errors in here? 
+        (async/<!! out-sending-results)))
+    status))
 
-;(screening-consumer-pipeline)
+(comment
+  (screening-consumer-pipeline))

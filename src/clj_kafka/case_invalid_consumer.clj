@@ -26,14 +26,14 @@
 (defn start-consuming
   []
   (reset! status :running)
-  (async/go
+  (async/thread
     (while (= @status :running)
       (let [records (.poll consumer-db 100)]
         (doseq [record records]
           (let [m (-> record
                       (.value)
                       nippy/thaw)]
-            (println "I got this event:" m "case is invalid!!"))))))
+            (println "EVENT is invalid!" m))))))
   status)
 
 

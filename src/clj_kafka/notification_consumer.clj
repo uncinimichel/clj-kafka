@@ -26,16 +26,16 @@
 (defn start-consuming
   []
   (reset! status :running)
-  (async/go
-    (while (= @status :running)
-      (let [records (.poll consumer-db 100)]
-        (doseq [record records]
-          (let [m (-> record
-                      (.value)
-                      nippy/thaw)]
-            (println "new CIAO!!!I got this event:" m "I am going to save it to the NOTIFICATION!!!"))))))
+  (async/thread
+   (while (= @status :running)
+     (let [records (.poll consumer-db 100)]
+       (doseq [record records]
+         (let [m (-> record
+                     (.value)
+                     nippy/thaw)]
+           (println "Saving:" m "in NOTIFICATION"))))))
   status)
 
 
-;(reset! status :no)
+                                        ;(reset! status :no)
                                         ;@status

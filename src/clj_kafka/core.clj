@@ -38,10 +38,9 @@
                            (.subscribe ["case-event"])))
 
 
-(def init-state
-  {
-   :111 {:case/lifecycle-state :case/unarchived
-         :case/name "Paolo Maldini"}})
+(def app-state (atom {:111 {:case/lifecycle-state :case/unarchived
+                            :case/name "Paolo Maldini"}}))
+
 
 (def e-create1  {:event/action :event/created
                  :event/payload {:case/id :6969
@@ -94,7 +93,6 @@
   (let [{:keys [:event/action :event/payload]} event
         fn-new-state (action (validating-case-event-ks state))
         [is-event-valid? new-state] (fn-new-state payload)]
-    (println "this event: " event "is or not valid? " is-event-valid?)
     (if is-event-valid?
       (if (= :event/screening action)
         (.send producer (ProducerRecord. "case-screening" (nippy/freeze event)))
@@ -102,45 +100,41 @@
       (.send producer (ProducerRecord. "case-invalid" (nippy/freeze event))))
     new-state))
 
-(defn lazy-consumer [consumer]
-  (lazy-seq
-   (let [records (.poll consumer 100)]
-     (concat records (lazy-consumer consumer)))))
-
 (def min-batch-size 1000)
 
+(def status (atom :running))
+
 (defn start-consuming-case-event
-  [init-state]
-  (async/go
-    (while true
+  []
+  (reset! status :running)
+  (async/thread
+    (while (= @status :running)
       (let [records (.poll consumer-case-event 100)]
         (doseq [record records]
-          (let [m (-> record
-                      (.value)
-                      nippy/thaw)]
-            (println m)))))))
-
-
-(comment
-  (start-consuming-case-event init-state)
-  (.send producer (ProducerRecord. "case-event" (nippy/freeze {:ciao "mamma"}))))
-
-(comment
-  (repeatedly 1 #(.send producer (ProducerRecord. "case-screening" (nippy/freeze e-screening)))))
+          (let [event (-> record
+                          (.value)
+                          nippy/thaw)
+                new-state (validate-event @app-state event)]
+            (reset! app-state new-state)
+            (println "After consuming:" event "I got this state:" @app-state))))))
+  status)
 
 (comment
   (def start-consumers
-    (let [s-status (s-consumer/screening-consumer-pipeline)
+    (let [c-status (start-consuming-case-event)
+          s-status (s-consumer/screening-consumer-pipeline)
           es-status (es-consumer/start-consuming)
           db-status (db-consumer/start-consuming)
           notification-status (notification-consumer/start-consuming)
           case-invalid-status (case-invalid-consumer/start-consuming)]
-      [s-status es-status db-status notification-status case-invalid-status])))
+      [c-status s-status es-status db-status notification-status case-invalid-status])))
 
 (comment
   (reset! s-c-status :no))
 
 (comment
-  (def new-state (reduce validate-event
-                         init-state
-                         [e-screening])))
+  (.send producer (ProducerRecord. "case-event" (nippy/freeze e-create))))
+
+(comment
+  (repeatedly 1 #(.send producer (ProducerRecord. "case-screening" (nippy/freeze e-screening)))))
+
