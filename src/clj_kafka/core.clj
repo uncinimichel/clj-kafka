@@ -6,8 +6,6 @@
            org.apache.kafka.clients.producer.KafkaProducer
            org.apache.kafka.clients.producer.ProducerRecord)
   (:require [taoensso.nippy :as nippy]
-            [clojure.spec.alpha :as s]
-            [clojure.spec.gen.alpha :as gen]
             [clj-kafka.specs :as ss]
             [clojure.core.async :as async]
             [clj-kafka.common :as common]
@@ -25,26 +23,31 @@
 
 (def producer (KafkaProducer. p-cfg))
 
-(def e-create1  {:event/action :event/created
+(def e-create1  {:event/id :unique-id-1
+                 :event/action :event/created
                  :event/payload {:case/id :6969
                                  :case/name "Abate"}})
 
-(def e-create2  {:event/action :event/created
+(def e-create2  {:event/id :unique-id-2
+                 :event/action :event/created
                  :event/payload {:case/id :9696
                                  :case/name "Silva"}})
 
-(def e-screening  {:event/action :event/screening
+(def e-screening  {:event/id :unique-id-3
+                   :event/action :event/screening
                    :event/payload {:case/id :111}})
 
-(def e-deleted  {:event/action :event/deleted
+(def e-deleted  {:event/id :unique-id-4
+                 :event/action :event/deleted
                  :event/payload {:case/id :111}})
 
-(def e-no-valid  {:event/action :event/deleted
+(def e-no-valid  {:event/id :unique-id-5
+                  :event/action :event/deleted
                   :event/payload {:case/id :no-there}})
 
 (comment
   (def start-consumers
-    (let [c-status (case-event-consumer/start-consuming-case-event)
+    (let [c-status (case-event-consumer/start-consuming)
           s-status (s-consumer/screening-consumer-pipeline)
           es-status (es-consumer/start-consuming)
           db-status (db-consumer/start-consuming)
@@ -56,8 +59,12 @@
   (reset! s-c-status :no))
 
 (comment
-  (.send producer (ProducerRecord. "case-event" (nippy/freeze e-create1))))
+  (doseq [e ss/many-events]
+    (.send producer (ProducerRecord. "case-event" (nippy/freeze e)))))
 
 (comment
   (repeatedly 1 #(.send producer (ProducerRecord. "case-screening" (nippy/freeze e-screening)))))
+
+                                        ;(count ss/many-creation-events)
+
 

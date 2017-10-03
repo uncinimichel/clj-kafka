@@ -30,44 +30,70 @@
 
 (defn validating-case-event-ks
   "Given an :event/action and a state it returns a boolean to say if the action it is acceptable with the current state and a new state"
-  [state]
-  {:event/created (fn [{:keys [:case/id :case/name]}]
-                    (if (get state id)
+  [{:keys [events cases] :as state }]
+  {:event/reply (fn [{:keys [:event/id]}]
+                  (let [is-valid? (get :events id)]
+                    [is-valid? state]))
+   :event/created (fn [{:keys [:case/id :case/name]}]
+                    (if (get cases id)
                       [false state]
-                      [true (assoc state id (hash-map :case/lifecycle-state :case/unarchived
-                                                      :case/name name
-                                                      :case/id id))]))
+                      [true (assoc-in state [:cases id] (hash-map :case/lifecycle-state :case/unarchived
+                                                                  :case/name name
+                                                                  :case/id id))]))
    :event/screening (fn [{:keys [:case/id]}]
-                      (let [case-s (get state id)]
+                      (let [case-s (get cases id)]
                         (if (or (nil? case-s)
                                 (= (:case/lifecycle-state case-s) :case/deleted))
                           [false state]
-                          [true (assoc-in state [id :case/screening-state] :case/screening)])))
+                          [true (assoc-in state [:cases id :case/screening-state] :case/screening)])))
    :event/screened (fn [{:keys [:case/id]}]
-                     (let [case-s (get state id)]
+                     (let [case-s (get cases id)]
                        (if (or (nil? case-s)
                                (= (:case/lifecycle-state case-s) :case/deleted))
                          [false state]
-                         [true (assoc-in state [id :case/screening-state] :case/screened)])))
+                         [true (assoc-in state [:cases id :case/screening-state] :case/screened)])))
+   :event/archived (fn [{:keys [:case/id]}]
+                     (let [case-s (get cases id)]
+                       (if (= (:case/lifecycle-state case-s) :case/deleted)
+                         [false state]
+                         [true (assoc-in state [:cases id :case/lifecycle-state] :case/archived)])))
+   :event/updated (fn [{:keys [:case/id]}]
+                    (let [case-s (get cases id)]
+                      (if (= (:case/lifecycle-state case-s) :case/deleted)
+                        [false state]
+                        [true (assoc-in state [:cases id :case/lifecycle-state] :case/updated)])))
    :event/deleted (fn [{:keys [:case/id]}]
-                    (let [case-s (get state id)]
+                    (let [case-s (get cases id)]
                       (if (or (= (:case/lifecycle-state case-s) :case/archived)
                               (= (:case/lifecycle-state case-s) :case/unarchived))
-                        [true (assoc-in state [id :case/lifecycle-state] :case/deleted)]
+                        [true (assoc-in state [:cases id :case/lifecycle-state] :case/deleted)]
                         [false state])))})
 
 (defn validate-event
   [state event]
-  (println event "EVENT!!!!")
-  (let [{:keys [:event/action :event/payload]} event
+  (println "This event is coming in:" event)
+  (let [{:keys [:event/action :event/payload]} (if (get-in state [:events (:event/id event)])
+                                                 {:event/action :event/reply
+                                                  :event/payload event}
+                                                 event)
+        _ (println "Processing this action:" action)
         fn-new-state (action (validating-case-event-ks state))
-        [is-event-valid? new-state] (fn-new-state payload)]
+        [is-event-valid? new-state] (fn-new-state payload)
+        _ (println "The action was:" is-event-valid?)]
     (if is-event-valid?
       (if (= :event/screening action)
         (.send producer (ProducerRecord. "case-screening" (nippy/freeze event)))
         (.send producer (ProducerRecord. "case-valid" (nippy/freeze event))))
       (.send producer (ProducerRecord. "case-invalid" (nippy/freeze event))))
     new-state))
+
+(comment
+  (validate-event {:cases { :111 {:case/lifecycle-state :case/archived
+                                  :case/name "Paolo Maldini"} }
+                   :events {:111 true}}
+                  {:event/id :111
+                   :event/action :event/created
+                   :event/payload {:case/id :112}}))
 
 (def status (atom :running))
 

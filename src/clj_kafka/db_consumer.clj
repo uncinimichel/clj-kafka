@@ -21,7 +21,6 @@
 
 (def status (atom :running))
 
-
 (defn fn-processing-record
   [record]
   (Thread/sleep 500)

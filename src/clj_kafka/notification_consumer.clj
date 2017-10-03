@@ -35,7 +35,3 @@
                      nippy/thaw)]
            (println "Saving:" m "in NOTIFICATION"))))))
   status)
-
-
-                                        ;(reset! status :no)
-                                        ;@status
