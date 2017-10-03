@@ -21,6 +21,13 @@
 
 (def status (atom :running))
 
+
+(defn fn-processing-record
+  [record]
+  (Thread/sleep 500)
+  (println "Saving:" record "in the DB"))
+
+
 (defn start-consuming
   []
   (reset! status :running)
@@ -34,20 +41,3 @@
             (fn-processing-record m))))))
                                         ;maybe checking that the event-id is not in the DB
   status)
-
-(defn fn-processing-record
-  [record]
-  (Thread/sleep 500)
-  (println "Saving:" record "in the DB"))
-
-(defprotocol MyKafkaConsumer
-  (start-consuming [this]))
-
-(defrecord DBconsumers []
-  MyKafkaConsumer
-  (start-consuming [this]
-    (println "this is" (type this))))
-
-(start-consuming (DBconsumers.))
-
-
