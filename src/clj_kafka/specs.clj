@@ -15,7 +15,6 @@
 (s/def :case/assigned string?)
 (s/def :case/last-screened-date string?)
 
-
                                         ; EVENT
 
 (s/def :event/id uuid?)
@@ -28,7 +27,6 @@
   (s/keys :req [:event/id
                 :event/action
                 :event/payload]))
-
 
 (s/def ::result
   (s/keys :req [:result/id :result/name]))
@@ -48,18 +46,14 @@
 (def a-c (gen/sample (s/gen ::case)))
 
                                         ; STATE
-
 (s/def :state/cases (s/map-of :case/id ::case))
 (s/def :state/events (s/map-of :event/id true?))
 (s/def ::state
   (s/keys :req [:state/cases :state/events]))
 
-(def a-state (gen/generate (s/gen ::state)))
-
-                                        ; Create many case
+(def a-state (gen/generate (s/gen ::state))w)
 
 (def many-events (gen/sample (s/gen ::k-event) 100))
-
 
 (def many-creation-events (filter #(= (:event/action %) :event/created)
                                   (gen/sample (s/gen ::k-event) 100)))

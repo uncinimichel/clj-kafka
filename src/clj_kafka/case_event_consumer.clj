@@ -22,17 +22,23 @@
    "key.deserializer" ByteArrayDeserializer
    "value.deserializer" ByteArrayDeserializer})
 
-(def app-state (atom {:111 {:case/lifecycle-state :case/unarchived
-                            :case/name "Paolo Maldini"}}))
+(def app-state (atom {:state/cases { :111 {:case/lifecycle-state :case/unarchived
+                                           :case/name "Paolo Maldini"}}
+                      :state/events {:111 true}}))
 
 (def consumer-case-event (doto (KafkaConsumer. c-cfg)
                            (.subscribe ["case-event"])))
 
+partition-all
+
+
 (defn validating-case-event-ks
   "Given an :event/action and a state it returns a boolean to say if the action it is acceptable with the current state and a new state"
-  [{:keys [events cases] :as state }]
+  [{:keys [:state/events :state/cases] :as state }]
   {:event/reply (fn [{:keys [:event/id]}]
                   (let [is-valid? (get :events id)]
+                                        ;If the event is in there, means that I have been processing this event,
+                                        ;So I am going to send back the state and if that event was valid or not.
                     [is-valid? state]))
    :event/created (fn [{:keys [:case/id :case/name]}]
                     (if (get cases id)
@@ -88,9 +94,9 @@
     new-state))
 
 (comment
-  (validate-event {:cases { :111 {:case/lifecycle-state :case/archived
-                                  :case/name "Paolo Maldini"} }
-                   :events {:111 true}}
+  (validate-event {:state/cases { :111 {:case/lifecycle-state :case/archived
+                                        :case/name "Paolo Maldini"} }
+                   :state/events {:111 true}}
                   {:event/id :111
                    :event/action :event/created
                    :event/payload {:case/id :112}}))
