@@ -13,11 +13,11 @@
    "group.id" "consumer-db-group"
    "auto.offset.reset" "earliest"
    "enable.auto.commit" "true"
-   "key.deserializer" ByteArrayDeserializer
-   "value.deserializer" ByteArrayDeserializer})
+   "key.deserializer" "org.apache.kafka.common.serialization.StringDeserializer"
+   "value.deserializer" "org.apache.kafka.common.serialization.LongDeserializer"})
 
 (def consumer-db (doto (KafkaConsumer. c-cfg)
-                   (.subscribe ["case-valid"])))
+                   (.subscribe ["case-n-t"])))
 
 (def status (atom :running))
 
@@ -25,7 +25,6 @@
   [record]
   (Thread/sleep 500)
   (println "Saving:" record "in the DB"))
-
 
 (defn start-consuming
   []
@@ -35,8 +34,17 @@
       (let [records (.poll consumer-db 100)]
         (doseq [record records]
           (let [m (-> record
-                      (.value)
-                      nippy/thaw)]
-            (fn-processing-record m))))))
+                      (.value))]
+            (println "value" m))))))
                                         ;maybe checking that the event-id is not in the DB
   status)
+
+(comment
+  (start-consuming))
+
+(def a (into-array  [(nippy/freeze 1) (nippy/freeze 1)]))
+(first a)
+(-> (seq a)
+    (#(map nippy/thaw %)))
+
+(into-array Object [2 "4"])

@@ -1,10 +1,15 @@
-(ns clj-kafka.core
+(ns clj-kafka.case_event_stream
   (:import org.apache.kafka.clients.consumer.ConsumerConfig
            org.apache.kafka.common.serialization.ByteArraySerializer
            org.apache.kafka.common.serialization.ByteArrayDeserializer
            org.apache.kafka.clients.consumer.KafkaConsumer
            org.apache.kafka.clients.producer.KafkaProducer
-           org.apache.kafka.clients.producer.ProducerRecord)
+           org.apache.kafka.clients.producer.ProducerRecord
+           org.apache.kafka.common.serialization.Serdes
+           [org.apache.kafka.streams StreamsConfig KafkaStreams]
+           org.apache.kafka.streams.processor.StateStoreSupplier
+           [org.apache.kafka.streams.kstream ForeachAction KStreamBuilder KStream KeyValueMapper]
+           org.apache.kafka.streams.state.Stores)
   (:require [taoensso.nippy :as nippy]
             [clj-kafka.specs :as ss]
             [clojure.core.async :as async]
@@ -17,11 +22,54 @@
             [clj-kafka.case_invalid_consumer :as case-invalid-consumer]
             [clj-kafka.case_event_consumer :as case-event-consumer]))
 
-(def p-cfg {"value.serializer" ByteArraySerializer
-            "key.serializer" ByteArraySerializer
+(def builder (KStreamBuilder.))
+
+(def k-stream 
+  (-> builder
+      (.stream (into-array String ["case-s-test"]))
+      (.groupBy (reify KeyValueMapper
+                  (apply [_ k v]
+                    k)))
+      (.count "case-counting")
+      (.to (Serdes/String)
+           (Serdes/Long)
+           "case-n-t")))
+
+(comment (.foreach (reify ForeachAction
+                     (apply [_ k v]
+                       (println "This is a K:" (nippy/thaw (.get k)))
+                       (println "This is a V:" (nippy/thaw (.get v)))))))
+
+
+(def kafka-streams
+  (KafkaStreams. builder
+                 (StreamsConfig. {StreamsConfig/APPLICATION_ID_CONFIG    "test-app-id"
+                                  StreamsConfig/BOOTSTRAP_SERVERS_CONFIG "localhost:9092"
+                                  StreamsConfig/KEY_SERDE_CLASS_CONFIG org.apache.kafka.common.serialization.Serdes$StringSerde
+                                  StreamsConfig/VALUE_SERDE_CLASS_CONFIG org.apache.kafka.common.serialization.Serdes$StringSerde})))
+
+(def state {:state/cases { :111 {:case/lifecycle-state :case/archived
+                                 :case/name "Paolo Maldini"} }
+            :state/events {:111 true}})
+
+(def event {:event/id :111
+            :event/action :event/created
+            :event/payload {:case/id :111}})
+
+(comment
+  (.start kafka-streams)
+  (.send producer (ProducerRecord. "case-s-test" "ciao" "Michel123"))
+  (.send producer (ProducerRecord. "case-s-test" (nippy/freeze (get-in event [:event/payload :case/id])) (nippy/freeze event))))
+
+
+
+(def p-cfg {"value.serializer" "org.apache.kafka.common.serialization.StringSerializer"
+            "key.serializer" "org.apache.kafka.common.serialization.StringSerializer"
             "bootstrap.servers" "localhost:9092"})
 
 (def producer (KafkaProducer. p-cfg))
+
+
 
 (def e-create1  {:event/id :unique-id-1
                  :event/action :event/created
@@ -71,10 +119,3 @@
                                         ;ss/many-events
 (comment
   (repeatedly 1 #(.send producer (ProducerRecord. "case-screening" (nippy/freeze e-screening)))))
-
-                                        ;(count ss/many-creation-events)
-(defn pp [a] (clojure.pprint/pprint a))
-
-with-open
-iterator-se
-(into-array ["coap"])
