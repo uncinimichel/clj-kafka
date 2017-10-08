@@ -31,14 +31,7 @@
   [store id case]
   (.put store (name id) case))
 
-(comment
-  @state
-  (:rules @state)q
-  (.getStateStore (:context @state) "case-store")
-  ((:event/created (:rules @state)) {:case/id "111"
-                                     :case/name "a neme"}))
-
-(defn validating-case-event-ks
+(defn validating-processing-case-event-ks
   [fn-store]
   {:event/created (fn [{:keys [:case/id :case/name]}]
                     (if-let [case-in-store (fn-store id)]
@@ -77,17 +70,17 @@
             (let [store (.getStateStore processor-context case-store)]
               (swap! state #(assoc %
                                    :context processor-context
-                                   :rules (validating-case-event-ks (partial get-current-case store))))))
+                                   :rules (validating-processing-case-event-ks (partial get-current-case store))))))
           (transform [_ k {:keys [:event/action :event/payload] :as v}]
             (let [{:keys [rules context]} @state
                   {:keys [:case/id]}      payload
                   store                   (.getStateStore context case-store)
-                  _                       (println "before:" (get-current-case store id))
+                  _                       (println "Store before:" (get-current-case store id))
                   fn-new-case             (action rules) 
                   [valid? new-case]       (fn-new-case payload)
                   _                       (println "Was this event valid?" valid? new-case)
                   _                       (update-case store id new-case)
-                  _                       (println "after:" (get-current-case store id))]
+                  _                       (println "Store after:" (get-current-case store id))]
               (KeyValue/pair (name id) (assoc new-case
                                               :event/valid? valid?
                                               :event/action action))))
@@ -121,7 +114,6 @@
         [c-screening c-valid c-not-valid] (.. case-e
                                               (transform case-validator (into-array String ["case-store"]))
                                               (branch (into-array Predicate [screening? valid? non-valid?])))]
-    ;; Materialize streams
     (.to c-screening "c-screening")
     (.to c-valid "c-valid")
     (.to c-not-valid "c-not-valid")
@@ -134,19 +126,19 @@
                                :case/lifecycle-state :case/archived
                                :case/name "a name"}})
 
- (def event-s {:event/id :111
-               :event/count 1
-               :event/action :event/screening
-               :event/payload {:case/id :999}})
+(def event-s {:event/id :111
+              :event/count 1
+              :event/action :event/screening
+              :event/payload {:case/id :999}})
 
- (def event-d {:event/id :111
-               :event/count 1
-               :event/action :event/deleted
-               :event/payload {:case/id :313}})
+(def event-d {:event/id :111
+              :event/count 1
+              :event/action :event/deleted
+              :event/payload {:case/id :313}})
 
- (comment
-   (common/with-topology case-validator-topology
-     (common/send-to "case-e-test" "2" event-s))
-   )
+(comment
+  (common/with-topology case-validator-topology
+    (common/send-to "case-e-test" "2" event-s))
+  )
 
  
