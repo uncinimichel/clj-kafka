@@ -23,8 +23,6 @@
             [clj-kafka.case_invalid_consumer :as case-invalid-consumer]
             [clj-kafka.case_event_consumer :as case-event-consumer]))
 
-(def state (atom {}))
-
 (defn- get-current-case
   [store id]
   (.get store (name id)))
@@ -34,12 +32,13 @@
   (.put store (name id) case))
 
 (comment
-  (:rules @state)
+  @state
+  (:rules @state)q
+  (.getStateStore (:context @state) "case-store")
   ((:event/created (:rules @state)) {:case/id "111"
                                      :case/name "a neme"}))
 
 (defn validating-case-event-ks
-  "Given an :event/action and a state it returns a boolean to say if the action it is acceptable with the current state and a new state"
   [fn-store]
   {:event/created (fn [{:keys [:case/id :case/name]}]
                     (if-let [case-in-store (fn-store id)]
@@ -69,37 +68,40 @@
 (def case-validator
   (reify TransformerSupplier
     (get [_]
-      (let [;state (atom {})
+      (let [state (atom {})
             case-store "case-store"]
         (reify Transformer
           (close [_]
             (.close (.getStateStore (:context @state) case-store)))
           (init [_ processor-context]
-            (println "I am starting a Transformer!!!")
             (let [store (.getStateStore processor-context case-store)]
               (swap! state #(assoc %
                                    :context processor-context
-                                   :rules (validating-case-event-ks (partial get-current-case store)))))) ;partial because I still don't have the case id!!
+                                   :rules (validating-case-event-ks (partial get-current-case store))))))
           (transform [_ k {:keys [:event/action :event/payload] :as v}]
-            (println "TransformatinoSS!!!")
             (let [{:keys [rules context]} @state
                   {:keys [:case/id]}      payload
                   store                   (.getStateStore context case-store)
-                                        ;                  _                       (update-investor-portfolio store v inc)
-                  fn-new-case             (action rules) ; I have to finish the partial fn
-                  [valid? new-case]       (fn-new-case payload)]
-              (if valid?      
-                (update-case store id new-case)
-                (update-case store id new-case)) ;If not valid I don't need it but I don't care because the KS is returing the same case... but can you trust that?
-              (KeyValue/pair (name id) (assoc v :case/valid? valid?))))
+                  _                       (println "before:" (get-current-case store id))
+                  fn-new-case             (action rules) 
+                  [valid? new-case]       (fn-new-case payload)
+                  _                       (println "Was this event valid?" valid? new-case)
+                  _                       (update-case store id new-case)
+                  _                       (println "after:" (get-current-case store id))]
+              (KeyValue/pair (name id) (assoc new-case
+                                              :event/valid? valid?
+                                              :event/action action))))
           (punctuate [_ t]))))))
-
-(name :ciao)
 
 (defn- check-marker-predicate [fn-mod]
   (reify Predicate
-    (test [_ k {:keys [:case/valid?]}]
+    (test [_ k {:keys [:event/valid?]}]
       (fn-mod valid?))))
+
+(defn- check-action-predicate [my-action]
+  (reify Predicate
+    (test [_ k {:keys [:event/action]}]
+      (= my-action action))))
 
 (def valid?
   (check-marker-predicate identity))
@@ -107,44 +109,44 @@
 (def non-valid?
   (check-marker-predicate not))
 
-(def builder (KStreamBuilder.))
+(def screening?
+  (and valid?
+       (check-action-predicate :event/screening)))
 
 (def case-validator-topology
-  (let [case-e                (.stream builder (into-array String ["case-e-test"]))
-        _                     (.. builder (addStateStore (common/build-store "case-store")
-                                                         (into-array String [])))
-        [c-valid c-not-valid] (.. case-e
-                                  (transform case-validator (into-array String ["case-store"]))
-                                  (branch (into-array Predicate [valid? non-valid?])))]
-
+  (let [builder                           (KStreamBuilder.)
+        case-e                            (.stream builder (into-array String ["case-e-test"]))
+        _                                 (.. builder (addStateStore (common/build-store "case-store")
+                                                                     (into-array String [])))
+        [c-screening c-valid c-not-valid] (.. case-e
+                                              (transform case-validator (into-array String ["case-store"]))
+                                              (branch (into-array Predicate [screening? valid? non-valid?])))]
     ;; Materialize streams
+    (.to c-screening "c-screening")
     (.to c-valid "c-valid")
     (.to c-not-valid "c-not-valid")
     builder))
 
+ (def event-c {:event/id :111
+               :event/count 1
+               :event/action :event/created
+               :event/payload {:case/id :999
+                               :case/lifecycle-state :case/archived
+                               :case/name "a name"}})
 
-(def kafka-streams
-  (KafkaStreams. builder
-                 (StreamsConfig. {StreamsConfig/APPLICATION_ID_CONFIG    "test-app-id"
-                                  StreamsConfig/BOOTSTRAP_SERVERS_CONFIG "localhost:9092"                                  
-                                  "producer.interceptor.classes"          "clj_kafka.common.MyProducerInterceptor"
-                                  StreamsConfig/KEY_SERDE_CLASS_CONFIG (.getClass (Serdes/String))
-                                  StreamsConfig/VALUE_SERDE_CLASS_CONFIG "clj_kafka.common.EdnSerde"})))
-(def event-1 {:event/id :111
-              :event/count 1
-              :event/action :event/created
-              :event/payload {:case/id :111
-                              :case/lifecycle-state :case/archived
-                              :case/name "a name"}})
+ (def event-s {:event/id :111
+               :event/count 1
+               :event/action :event/screening
+               :event/payload {:case/id :999}})
 
-(comment
-  (.start kafka-streams)
-  (.send producer (ProducerRecord. "case-e-test" "1" event-1))
-  (.send producer (ProducerRecord. "case-s-test" "ciao" (nippy/freeze event)))
-  (.send producer (ProducerRecord. "case-s-test" (nippy/freeze (get-in event [:event/payload :case/id])) (nippy/freeze event))))
+ (def event-d {:event/id :111
+               :event/count 1
+               :event/action :event/deleted
+               :event/payload {:case/id :313}})
 
-(def p-cfg {"bootstrap.servers" "localhost:9092"})
+ (comment
+   (common/with-topology case-validator-topology
+     (common/send-to "case-e-test" "2" event-s))
+   )
 
-(def producer (KafkaProducer. p-cfg
-                              (StringSerializer.)
-                              (serializers/edn-serializer)))
+ 

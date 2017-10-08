@@ -1,7 +1,8 @@
 (ns clj-kafka.common
   (:import [org.apache.kafka.common.serialization Serde Deserializer Serializer Serdes StringSerializer]
            [org.apache.kafka.clients.producer KafkaProducer ProducerConfig ProducerInterceptor ProducerRecord]
-           [org.apache.kafka.streams.state QueryableStoreTypes Stores])
+           [org.apache.kafka.streams.state QueryableStoreTypes Stores]
+           [org.apache.kafka.streams KafkaStreams StreamsConfig])
   (:require [franzy.serialization.deserializers :as deserializers]
             [franzy.serialization.serializers :as serializers]
             [org.httpkit.client :as http]
@@ -45,6 +46,8 @@
 
 (def output-results (atom {}))
 
+                                        ; Maybe for logs???
+
 (deftype MyProducerInterceptor []
   ProducerInterceptor
   (close [_])
@@ -63,6 +66,35 @@
       ;;        {:key   (deserialize (Serdes/String) (.key record))
       ;;         :value (deserialize deserializer (.value record))})
       record)))
+
+                                        ; Stuff useful for doing stuff :D
+
+(def stream-config 
+  (StreamsConfig. {StreamsConfig/APPLICATION_ID_CONFIG    "test-app-id"
+                   StreamsConfig/BOOTSTRAP_SERVERS_CONFIG "localhost:9092"                                  
+                   "producer.interceptor.classes"          "clj_kafka.common.MyProducerInterceptor"
+                   StreamsConfig/KEY_SERDE_CLASS_CONFIG (.getClass (Serdes/String))
+                   StreamsConfig/VALUE_SERDE_CLASS_CONFIG "clj_kafka.common.EdnSerde"}))
+ 
+(defmacro with-topology
+  [name & body]
+  `(with-open [ks# (KafkaStreams. ~name stream-config)]
+     ~@body
+     (.cleanUp ks#)
+     (.start ks#)
+                                        ;give him some seconds before close KS so it can produce
+        (Thread/sleep 5000)))
+
+(defn send-to
+  [topic k v]
+  (let [config {ProducerConfig/BOOTSTRAP_SERVERS_CONFIG "localhost:9092"
+                ProducerConfig/ACKS_CONFIG              "all"
+                ProducerConfig/RETRIES_CONFIG           "1"}]
+    (with-open [producer (KafkaProducer. config
+                                         (StringSerializer.)
+                                         (serializers/edn-serializer))]
+      (.get (.send producer (ProducerRecord. (name topic) k v)))
+      (.flush producer))))
 
 (defn build-store
   ([name]
