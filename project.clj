@@ -13,7 +13,10 @@
                  [org.clojure/data.json "0.2.6"]
                  [org.clojure/test.check "0.9.0"]
                  [ymilky/franzy "0.0.1"]
-                 [ymilky/franzy-admin "0.0.1"]])
+                 [ymilky/franzy-avro "0.0.1"]
+                 [ymilky/franzy-admin "0.0.1"]
+                 [ymilky/franzy-json "0.0.1"]]
+  :dev {:resource-paths ["/Users/admin/.m2/repository/"]})
 
 
 

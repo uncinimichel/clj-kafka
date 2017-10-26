@@ -18,7 +18,7 @@
                                         ; EVENT
 
 (s/def :event/id uuid?)
-(def c (gen/generate (s/gen :event/id)))
+(defn gen-s [spec] (gen/generate (s/gen spec)))
 
 (s/def :event/action #{:event/created
                        :event/archived
@@ -33,8 +33,6 @@
   (s/keys :req [:event/id
                 :event/action
                 :event/payload]))
-
-;(gen/sample (s/gen ::k-event))
 
 (s/def ::result
   (s/keys :req [:result/id :result/name]))

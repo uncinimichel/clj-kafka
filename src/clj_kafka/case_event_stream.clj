@@ -58,6 +58,7 @@
                         [true (assoc case-in-store :case/lifecycle-state :case/deleted)]
                         [false case-in-store])))})
 
+
 (def case-validator
   (reify TransformerSupplier
     (get [_]
@@ -111,6 +112,7 @@
         case-e                            (.stream builder (into-array String ["case-e-test"]))
         _                                 (.. builder (addStateStore (common/build-store "case-store")
                                                                      (into-array String [])))
+        _                                 ()
         [c-screening c-valid c-not-valid] (.. case-e
                                               (transform case-validator (into-array String ["case-store"]))
                                               (branch (into-array Predicate [screening? valid? non-valid?])))]
@@ -119,26 +121,32 @@
     (.to c-not-valid "c-not-valid")
     builder))
 
- (def event-c {:event/id :111
-               :event/count 1
-               :event/action :event/created
-               :event/payload {:case/id :999
-                               :case/lifecycle-state :case/archived
-                               :case/name "a name"}})
+(def event-c {:event/id :111
+              :event/action :event/created
+              :event/payload {:case/id :999
+                              :case/lifecycle-state :case/archived
+                              :case/name "a name"}})
+(def gen-eve (fn [{:keys [:case-id :event/action :event/id]}]
+               {:event/id id
+                :event/action action
+                :event/payload {:case/id case-id
+                                :case/lifecycle-state :case/archived
+                                :case/name "a name"}}))
+
+(comment
+  (gen-eve {:event/action (ss/gen-s :event/action)
+            :event/id     (ss/gen-s :event/id)
+            :case-id      (ss/gen-s :case/id)}))
 
 (def event-s {:event/id :111
-              :event/count 1
               :event/action :event/screening
               :event/payload {:case/id :999}})
 
 (def event-d {:event/id :111
-              :event/count 1
               :event/action :event/deleted
               :event/payload {:case/id :313}})
 
 (comment
   (common/with-topology case-validator-topology
-    (common/send-to "case-e-test" "2" event-s))
-  )
+    (common/send-to "case-e-test" "2" event-s)))
 
- 
